@@ -1,3 +1,10 @@
+% NEED TO UPDATE MADE TO WORK WITH DIVERSE HAIR DATA
+%    .bvef FILE NEEDS TO BE CHANGED TO CHANNEL LOCS FOR SEP
+%    ICA NEEDS TO BE REMOVED
+%    CHECK FOR ANYTHING ELSE
+
+
+
 % Define the MADE processing pipeline as a function
 %function [] = MADE_pipeline(dataset, subjects, session)
 %TO RUN LOCALLY & NOT ON HPC:

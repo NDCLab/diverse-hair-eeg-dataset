@@ -1,3 +1,7 @@
+% NEED TO VERIFY THAT THE EVENT STRUCTURE FOR EEG RECORDINGS FROM DHEEG ALIGNS WITH PREVIOUS STUDIES
+% IF NOT - THEN EDIT EVENT LABELING SCRIPT HERE TO CORRECTLY LABEL FOR THE EEG STRUCT FOR SEP/DHEEG
+
+
 function EEG = edit_event_markers_read(EEG)
 %
 %%%%%% Label event markers%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
