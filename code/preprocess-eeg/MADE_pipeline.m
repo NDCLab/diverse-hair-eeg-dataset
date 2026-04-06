@@ -1,20 +1,15 @@
 % NEED TO UPDATE MADE TO WORK WITH DIVERSE HAIR DATA
-%    .bvef FILE NEEDS TO BE CHANGED TO CHANNEL LOCS FOR SEP
 %    ICA NEEDS TO BE REMOVED
 %    CHECK FOR ANYTHING ELSE
 
 
 
 % Define the MADE processing pipeline as a function
-%function [] = MADE_pipeline(dataset, subjects, session)
+function [] = MADE_pipeline(dataset, subjects)
 %TO RUN LOCALLY & NOT ON HPC:
-dataset = 'diverse-hair-eeg-dataset';
-subjects = '3000001/3000002';
-session = 's1_r1';
-% dataset: str like 'thrive-dataset'
-% subjects: str like '3000001/3000002/3000003/3000004'
-% session: str like 's1_r1'
-
+%dataset = 'diverse-hair-eeg-dataset';
+%subjects = '2900000/2900001/2900002/290003/290004/290005/290006/290007/290008/290009/290010/290011/290012/290013/290014/290015';
+    
 %%to Run on FIU HPC%
 % create a local cluster object
 cluster = parcluster('local');
@@ -109,28 +104,22 @@ addpath(pwd);
 rmpath(['/home/data/NDClab/tools/lab-devOps/scripts/MADE_pipeline_standard/eeglab13_4_4b' filesep 'functions' filesep 'octavefunc' filesep 'signal'])
 
 % 1. Enter the path of the folder that has the raw data to be analyzed
-%rawdata_location_parent = strcat(main_dir, '/sourcedata/raw/', session, '/eeg');
-rawdata_location_parent = strcat(main_dir, '/sourcedata/checked/');
+rawdata_location_parent = strcat(main_dir, '/sourcedata/raw/eeg'); % Only raw data available, no checked
+%rawdata_location_parent = strcat(main_dir, '/sourcedata/checked/');
 rawdata_location_parent = char(rawdata_location_parent);
 
 % 2. Enter the path of the channel location file
-%channel_locations = loadbvef('/home/data/NDClab/datasets/thrive-dataset/code/thrive_eeg/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-64only.bvef');
-%channel_locations = loadbvef(strcat(main_dir, '/code/eeg_preprocessing/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-64only.bvef'));
-channel_locations = loadbvef('/home/data/NDClab/tools/lab-devOps/scripts/MADE_pipeline_standard/eeg_preprocessing/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-64only.bvef');
+channel_locations = loadbvef('/home/data/NDClab/tools/lab-devOps/scripts/MADE_pipeline_standard/eeg_preprocessing/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-no-cap-9elec-only.bvef'); % need to add bvef file to this directory for SEP
 
 % STIMULUS TRIGGERS
 % practice congruent right: 1
 % practice congruent left: 2
 % practice incongruent right: 3
 % practice incongruent left: 4
-% non-social congruent right: 41
-% non-social congruent left: 42
-% non-social incongruent right: 43
-% non-social incongruent left: 44
-% social congruent right: 51
-% social congruent left: 52
-% social incongruent right: 53
-% social incongruent left: 54
+% main task congruent right: 41
+% main task congruent left: 42
+% main task incongruent right: 43
+% main task incongruent left: 44
 
 % RESPONSE TRIGGERS
 % correct: 11
@@ -140,18 +129,12 @@ channel_locations = loadbvef('/home/data/NDClab/tools/lab-devOps/scripts/MADE_pi
 
 % 4. Do your data need correction for anti-aliasing filter and/or task related time offset?
 adjust_time_offset = 1; % 0 = NO (no correction), 1 = YES (correct time offset)
-
-stimulus_markers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', ...
-    'S 44', 'S 51', 'S 52', 'S 53', 'S 54'}; % enter the stimulus markers that need to be adjusted for time offset % fine only if we dont adjust for onset, not even used further in the code
+stimulus_markers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', 'S 44'}; % enter the stimulus markers that need to be adjusted for time offset % fine only if we dont adjust for onset, not even used further in the code
 response_markers = {}; % enter the response makers that need to be adjusted for time offset % same as line above !!!
-stim_offset_list = [10.76, 11.83];  % read task sys1 and sys 2 timings results
+stim_offset_list = [];  % need to get timing test results for DHEEG task
 stimulus_timeoffset = round(mean(stim_offset_list)); % stimulus related time offset (in milliseconds). 0 = No time offset
-max_stim_count = 360;
-stim_count_thresh = 320;
-read_stim_marker = {'S255', 'S127'}; %markers to identify reading ranger portion of task
-response_markers = {}; % enter the response makers that need to be adjusted for time offset % same as line above !!!
-stim_events_nonsoc = {'S 41', 'S 42', 'S 43', 'S 44'};
-stim_events_soc = {'S 51', 'S 52', 'S 53', 'S 54'};
+stim_events = {'S 41', 'S 42', 'S 43', 'S 44'};
+
 % 5. Do you want to down sample the data?
 down_sample = 1; % 0 = NO (no down sampling), 1 = YES (down sampling)
 sampling_rate = 1000; % set sampling rate (in Hz), if you want to down sample
@@ -163,7 +146,7 @@ sampling_rate = 1000; % set sampling rate (in Hz), if you want to down sample
 %    locations
 delete_outerlayer = 0; % 0 = NO (do not delete outer layer), 1 = YES (delete outerlayer);
 % If you want to delete outer layer, make a list of channels to be deleted
-outerlayer_channel = {'16','15','12','13','8','31','26','25','30','32','60','64','61','62','56','57','63','41','46','45','48'}; % list of channels
+outerlayer_channel = {};
 
 % 7. Initialize the filters
 highpass = .1; % High-pass frequency
@@ -171,8 +154,7 @@ lowpass  = 49; % Low-pass frequency. We recommend low-pass filter at/below line 
 
 % 8. Are you processing task-related or resting-state EEG data?
 task_eeg = 1; % 0 = resting, 1 = task
-task_event_markers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', ...
-    'S 44', 'S 51', 'S 52', 'S 53', 'S 54', 'S 11', 'S 12', 'S 21', 'S 22'}; % enter all the event/condition markers (i.e., stim + resp markers)
+task_event_markers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', 'S 44', 'S 11', 'S 12', 'S 21', 'S 22'}; % enter all the event/condition markers (i.e., stim + resp markers)
 
 % 9. Do you want to epoch/segment your data?
 epoch_data = 1; % 0 = NO (do not epoch), 1 = YES (epoch data)
@@ -215,15 +197,16 @@ output_format = 1; % 1 = .set (EEGLAB data structure), 2 = .mat (Matlab data str
 % List subject folders under EEG folder
 cd (rawdata_location_parent)
 subjects_to_process = string(split(subjects, "/"));
-subjects_to_process = subjects_to_process(subjects_to_process~=""); %nvm not necessary
-subjects_to_process = strcat("sub-", subjects_to_process);
+subjects_to_process = subjects_to_process(subjects_to_process~="");
+subjects_to_process = strtrim(subjects_to_process);
+subjects_to_process = strcat(subjects_to_process);
 %for file_locater_counter = 1:length(subjects_to_process) % This for loop lists the folders containing the main data files
-parfor file_locater_counter = 1:length(subjects_to_process) %1:4
+parfor file_locater_counter = 1:length(subjects_to_process) %1:16
         try
-        disp('DEBUG 1');
         subjStart = tic;
         %rawdata_location = fullfile(rawdata_location_parent, subjects_to_process(file_locater_counter));
-        rawdata_location = fullfile(rawdata_location_parent, subjects_to_process(file_locater_counter), session, 'eeg');
+        rawdata_location = fullfile(rawdata_location_parent, subjects_to_process(file_locater_counter));
+        rawdata_location = strtrim(char(rawdata_location));
         rawdata_location = char(rawdata_location);
         if ~isdir(rawdata_location)
             warning(['Cannot find ' char(subjects_to_process(file_locater_counter)) ' folder in ' rawdata_location_parent ', skipping.']);
@@ -231,58 +214,9 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:4
         end
 
         % Read files to analyses
-        datafile_names=dir([rawdata_location filesep '*.vhdr']);
+        datafile_names=dir([rawdata_location filesep '*flanker_eeg*.vhdr']);
         datafile_names=datafile_names(~ismember({datafile_names.name},{'.', '..', '.DS_Store'}));
         datafile_names={datafile_names.name};
-        %[filepath,name,ext] = fileparts(char(datafile_names{1}));
-        if length(datafile_names) == 0
-            %warning(['Cannot find vhdr file / files in ' rawdata_location ', skipping.']);
-            %continue
-            error(['Cannot find vhdr file / files in ' rawdata_location ', skipping.']);
-        end
-        % display(sprintf('DATAFILE NAMES: %s', datafile_names));
-        % Enter the path of the folder where you want to save the processed data
-        output_location = fullfile(main_dir, 'derivatives', 'preprocessed', subjects_to_process(file_locater_counter), session, 'eeg' );
-        %output_location = fullfile('/home/data/NDClab/analyses/thrive-theta-ddm/', 'derivatives', 'preprocessed', subjects_to_process(file_locater_counter), session, 'eeg' );
-        % update the output_location
-        output_location = char(output_location);
-        disp('DEBUG 2');
-        % write each sub to different logfile in output dir
-        [~, vhdr_file, ~] = fileparts(subjects_to_process(file_locater_counter));
-        if exist([output_location filesep 'MADE_logfiles'], 'dir') == 0
-            mkdir([output_location filesep 'MADE_logfiles'])
-        end
-        dfile=fullfile(output_location, 'MADE_logfiles', [char(vhdr_file) '_' datestr(now,'mm-dd-yyyy_HH:MM:SS') '.log']);
-        diary(dfile)
-        disp('DEBUG 3');
-        % corrected=dir([rawdata_location filesep 'deviation.txt']);
-        correcteddev = dir([rawdata_location filesep '*deviation*.txt']);
-        correctedissue = dir([rawdata_location filesep '*issue*.txt']);
-        disp('DEBUG 4');
-        if ~isempty(correcteddev) || ~isempty(correctedissue)
-            corrected=1;
-            disp('DEBUG 5');
-            disp(rawdata_location);
-            [stim_count_nonsoc, stim_count_soc] = stim_cnt_check_read(rawdata_location);
-            disp('DEBUG 6');
-            if stim_count_nonsoc == max_stim_count && stim_count_soc == max_stim_count % all markers are present
-                datafiles_for_log = strjoin(datafile_names, ', ');;
-                datafile_names = {datafile_names{1}};
-                deviation_category = 1;
-                disp('DEBUG 7');
-            elseif stim_count_nonsoc < stim_count_thresh && stim_count_soc < stim_count_thresh % not enough markers in both conditions, will not process
-                datafile_names = {};                
-                disp('DEBUG 8');
-                deviation_category = 2;
-            else % some markers are absent, we will proces this file and handle the deviation
-                deviation_category = 3;
-                datafiles_for_log = strjoin(datafile_names, ', ');;
-                datafile_names = {datafile_names{1}}; % because merging of all EEG files will happen before the preprocessing, here it's enough to only take the first file; otherwise, the later loop will iterate over the same merged file length(datafile_names) times
-            end
-        else
-            corrected=0;
-        end
-        disp('DEBUG 9');
         % display(sprintf('DATAFILE NAMES: %s', datafile_names));
         %% Check whether EEGLAB and all necessary plugins are in Matlab path.
         if exist('eeglab','file')==0
@@ -309,7 +243,6 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:4
         if exist([output_location], 'dir') == 0
             mkdir([output_location])
         end
-        disp('DEBUG 10');
         %% Initialize output variables
         reference_used_for_faster=[]; % reference channel used for running faster to identify bad channel/s
         faster_bad_channels=[]; % number of bad channel/s identified by faster
@@ -325,30 +258,14 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:4
 
         % switch to output directory
         cd(output_location);
-        disp('DEBUG 11');
+
         % display(sprintf('DATAFILE NAMES: %s', datafile_names));
         for subject=1:length(datafile_names)
             % "subject" is actually a single EEG file (its index) within a given subject folder from subjects_to_process list
             %[filepath,name,ext] = fileparts(char(datafile_names{subject}));
             % vhdr_filename = datafile_names{subject};
-            filename_re = regexp(datafile_names{subject}, '^(sub-[0-9]+)_([a-zA-Z0-9_-]+)_(s[0-9]+_r[0-9]+_e[0-9]+)(\.[a-z0-9]+)$', 'tokens');
-            disp('DEBUG 12');
-            disp(filename_re);
             disp(datafile_names);
             % filename_re = regexp(datafile_names{subject}, '^(sub-[0-9]+)_([a-zA-Z0-9_-]+)_(s[0-9]+_r[0-9]+_e[0-9]+)_?([a-zA-Z0-9_-]*)(\.[a-z0-9]+)$', 'tokens');
-            if length(filename_re) == 0 && corrected == 0 % file named incorrectly and no deviation found, we don't want to process these because those should be noted in deviation
-                warning(['File name ' datafile_names{subject} ' in ' rawdata_location ' does not match  conventions-1, skipping.']);
-                continue
-            % EEG files with a deviation.txt in the folder may have an additional description before ".vhdr" and after "s1_r1_e1"
-            elseif length(filename_re) == 0 && corrected == 1 % file named incorrectly but there was a deviation, we want to process a merged file here
-                filename_re = regexp(datafile_names{subject}, '^(sub-[0-9]+)_([a-zA-Z0-9_-]+)_(s[0-9]+_r[0-9]+_e[0-9]+)_([a-zA-Z0-9_-]+)(\.[a-z0-9]+)$', 'tokens');
-                [subj, task, sess, desc, ext] = filename_re{1}{:};
-                output_report_path = [output_location filesep 'MADE_preprocessing_report_' task '_' sess];
-            else % correct file without deviation
-                [subj, task, sess, ext] = filename_re{1}{:};
-                output_report_path = [output_location filesep 'MADE_preprocessing_report_' task '_' sess];
-            end
-            disp('DEBUG 12-1');
             %% Initialize EEG structure, output variables, and report table
             EEG=[]; %initialize eeg structure
             report_table = []; %report table that will be created and written to disk (appended) after processing completes for this participant
@@ -361,54 +278,18 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:4
             total_epochs_before_artifact_rejection=[];
             total_epochs_after_artifact_rejection=[];
             total_channels_interpolated=[]; % total_channels_interpolated=faster_bad_channels+ica_preparation_bad_channels
-            if corrected == 1;
-                fprintf('\n\n\n*** Processing subject %d with a deviation; the files will be merged (%s) ***\n\n\n', subject, datafiles_for_log);
-            else
             fprintf('\n\n\n*** Processing subject %d (%s) ***\n\n\n', subject, datafile_names{subject});
-            end
             %% STEP 1: Import EEG data file and relevant information
-
             %load in raw data
-            if corrected == 1
-                disp('DEBUG 13');
-                if deviation_category == 2 % not enough markers in both conditions, skip
-                    disp('Not enough data in both conditions. Skip...');
-                    continue
-                else % all other cases, merge and process
-                    disp('DEBUG 14');
-                    EEG = load_and_merge_2(rawdata_location);
-                    EEG_copy_for_faster=[];
-                    EEG_copy_for_faster=EEG; % make a copy of the dataset
-                    EEG_copy_for_faster = eeg_checkset(EEG_copy_for_faster); 
-                    disp('DEBUG 15');
-                end
-            else
-                EEG = pop_loadbv(rawdata_location, datafile_names{subject});
-                EEG = eeg_checkset(EEG);
-                %%% Remove reading ranger data
-                allFlankerMarkers = [stimulus_markers, {'S 11','S 12','S 21','S 22'}];
-                flankerIdx = find(ismember({EEG.event.type}, allFlankerMarkers));
-                if isempty(flankerIdx)
-                    error('No flanker stimulus markers found');
-                end
-                firstFlanker = EEG.event(flankerIdx(1)).latency;
-                lastFlanker = EEG.event(flankerIdx(end)).latency;
-                startSample = max(1, round(firstFlanker - 30*EEG.srate));
-                endSample = min(EEG.pnts, round(lastFlanker + 30*EEG.srate));
-                EEG = pop_select(EEG, 'point', [startSample endSample]);
-            end
-            disp('DEBUG 16');
+            EEG = pop_loadbv(rawdata_location, datafile_names{subject});
             EEG = eeg_checkset(EEG);
-
             %% STEP 4: Change sampling rate
             if down_sample==1
-		disp('DEBUG 17');
                 if floor(sampling_rate) > EEG.srate
                     error ('Sampling rate cannot be higher than recorded sampling rate');
                 elseif floor(sampling_rate) ~= EEG.srate
                     EEG = pop_resample( EEG, sampling_rate);
                     EEG = eeg_checkset( EEG );
-		disp('DEBUG 18');
                 end
             end
 
@@ -589,26 +470,10 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:4
                 channels_analysed=EEG.chanlocs;
                 reference_used_for_faster={EEG.chanlocs(ref_chan).labels};
             end
-            if corrected == 1
-               eeg_pieces = make_eeg_pieces(EEG_copy_for_faster);
-               FASTbadChans = {};
-               for f=1:length(eeg_pieces)
-                   segment_bad_chs = preprocess_eeg_piece(eeg_pieces{f}, channel_locations, stimulus_timeoffset);
-                   disp('DEBUG 17');i
-                   FASTbadChans{f} = reshape(segment_bad_chs, 1, []);
-                   % FASTbadChans{f} = segment_bad_chs;
-                   disp('DEBUG 18');
-               end
-               FASTbadChans = unique([FASTbadChans{:}]);
-               disp('DEBUG 18');
-            end
             % If FASTER identifies all channels as bad channels, save the dataset
             % at this stage and ignore the remaining of the preprocessing.
             if numel(FASTbadChans)==EEG.nbchan || numel(FASTbadChans)+1==EEG.nbchan
                 all_chan_bad_FAST=1;
-                if corrected == 1
-                    warning(['No usable data for datafile', datafiles_for_log]);
-                else
                 warning(['No usable data for datafile', datafile_names{subject}]);
                 end
                 if output_format==1
