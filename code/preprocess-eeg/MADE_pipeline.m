@@ -131,7 +131,8 @@ channel_locations = loadbvef('/home/data/NDClab/tools/lab-devOps/scripts/MADE_pi
 adjust_time_offset = 1; % 0 = NO (no correction), 1 = YES (correct time offset)
 stimulus_markers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', 'S 44'}; % enter the stimulus markers that need to be adjusted for time offset % fine only if we dont adjust for onset, not even used further in the code
 response_markers = {}; % enter the response makers that need to be adjusted for time offset % same as line above !!!
-stim_offset_list = [];  % need to get timing test results for DHEEG task
+stim_offset_list = [11.46, 12.77, 12.32, 10.07, 11.12, 11.52, 10.75, 11.42, 11.46, 11.45, 10.71, 10.91, 10.3, 10.69, 11.42, ... 
+11.74, 12.82, 10.82, 11.81, 11.24, 11.5];  % need to get timing test results for DHEEG task, using THRIVE timing test for now
 stimulus_timeoffset = round(mean(stim_offset_list)); % stimulus related time offset (in milliseconds). 0 = No time offset
 stim_events = {'S 41', 'S 42', 'S 43', 'S 44'};
 
@@ -171,7 +172,7 @@ volt_threshold = [-125 125]; % lower and upper threshold (in ?V)
 
 % 12. Do you want to perform epoch level channel interpolation for artifact laden epoch? (see manuscript for detail)
 interp_epoch = 1; % 0 = NO, 1 = YES.
-frontal_channels = {'14','11','10','43','44','47'}; % If you set interp_epoch = 1, enter the list of frontal channels to check (see manuscript for detail)
+frontal_channels = {'11','16'}; % VEOG ELECTRODES; If you set interp_epoch = 1, enter the list of frontal channels to check (see manuscript for detail)
 
 %13. Do you want to interpolate the bad channels that were removed from data?
 interp_channels = 1; % 0 = NO (Do not interpolate), 1 = YES (interpolate missing channels)
@@ -212,6 +213,12 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
             warning(['Cannot find ' char(subjects_to_process(file_locater_counter)) ' folder in ' rawdata_location_parent ', skipping.']);
             continue
         end
+
+        % Construct subject identifier and output paths
+        curr_subj_folder = char(subjects_to_process(file_locater_counter));
+        subj = ['sub-' curr_subj_folder];
+        output_location = char(fullfile(main_dir, 'derivatives', 'preprocessed', subj, 'eeg'));
+        output_report_path = char(fullfile(main_dir, 'derivatives', 'preprocessed', 'MADE_preprocessing_report'));
 
         % Read files to analyses
         datafile_names=dir([rawdata_location filesep '*flanker_eeg*.vhdr']);
@@ -265,7 +272,12 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
             %[filepath,name,ext] = fileparts(char(datafile_names{subject}));
             % vhdr_filename = datafile_names{subject};
             disp(datafile_names);
-            % filename_re = regexp(datafile_names{subject}, '^(sub-[0-9]+)_([a-zA-Z0-9_-]+)_(s[0-9]+_r[0-9]+_e[0-9]+)_?([a-zA-Z0-9_-]*)(\.[a-z0-9]+)$', 'tokens');
+            % Parse task and session from filename (handles both s1r1e1 and s1_r1_e1 formats)
+            [~, fname_noext, ~] = fileparts(datafile_names{subject});
+            sess_match = regexp(fname_noext, '(s\d+r\d+e\d+|s\d+_r\d+_e\d+)$', 'tokens');
+            sess = sess_match{1}{1};
+            task = fname_noext(length(subj)+2 : end-length(sess)-1);
+            corrected = 0;
             %% Initialize EEG structure, output variables, and report table
             EEG=[]; %initialize eeg structure
             report_table = []; %report table that will be created and written to disk (appended) after processing completes for this participant
@@ -313,17 +325,15 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
             %%%
             %delete ground from newChanLocs
             modNewChanlocs = channel_locations(2:end);
-
+            chan_labels_to_keep = {modNewChanlocs.labels};
+            channels_to_keep = 1:length(chan_labels_to_keep);
             %replace chanlocs with
             EEG.chanlocs = modNewChanlocs;
-            EEG.nbchan = EEG.nbchan+1;
+            EEG.data = EEG.data(channels_to_keep, :);
+            EEG.nbchan = length(channels_to_keep);
             %%%%
             EEG = eeg_checkset( EEG );
             %[ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
-
-            EEG = eeg_checkset( EEG );
-            %[ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
-
             %update/refresh eeglab and plot
             %eeglab redraw
 
@@ -475,27 +485,20 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
             if numel(FASTbadChans)==EEG.nbchan || numel(FASTbadChans)+1==EEG.nbchan
                 all_chan_bad_FAST=1;
                 warning(['No usable data for datafile', datafile_names{subject}]);
-                end
                 if output_format==1
                     EEG = eeg_checkset(EEG);
-                    %EEG = pop_editset(EEG, 'setname',  strrep(datafile_names{subject}, ext, '_no_usable_data_all_bad_channels'));
-                    %EEG = pop_saveset(EEG, 'filename', strrep(datafile_names{subject}, ext, '_no_usable_data_all_bad_channels.set'),'filepath', [output_location filesep 'processed_data' filesep ]); % save .set format
-                    %EEG = pop_editset(EEG, 'setname', strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess,desc));
-                    %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
-                    EEG = pop_editset(EEG, 'setname', strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess));
-                    EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
+                    EEG = pop_editset(EEG, 'setname', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess));
+                    EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.set'),'filepath', [output_location filesep]);
                 elseif output_format==2
-                    %save([[output_location filesep 'processed_data' filesep ] strrep(datafile_names{subject}, ext, '_no_usable_data_all_bad_channels.mat')], 'EEG'); % save .mat format
-                    %parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess,desc,'.mat')], EEG); % save .mat format
-                    parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_epochs_',sess,'.mat')], EEG); % save .mat format
+                    parsave([[output_location filesep] strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.mat')], EEG);
                 end
             else
                 % Reject channels that are bad as identified by Faster
-                EEG = pop_select( EEG,'nochannel', FASTbadChans);
+                EEG = pop_select(EEG,'nochannel', FASTbadChans);
                 EEG = eeg_checkset(EEG);
                 if numel(ref_chan)==1
                     ref_chan=find(any(EEG.data, 2)==0);
-                    EEG = pop_select( EEG,'nochannel', ref_chan); % remove reference channel
+                    EEG = pop_select(EEG,'nochannel', ref_chan); % remove reference channel
                 end
             end
 
@@ -528,7 +531,6 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
                 writetable(report_table, [output_report_path '.csv'], "WriteMode", "append");
                 continue % ignore rest of the processing and go to next subject
             end
-            disp('DEBUG 19');
             %% Save data after running filter and FASTER function, if saving interim results was preferred
             if save_interim_result ==1
                 if output_format==1
@@ -542,276 +544,281 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
                     parsave([[output_location filesep ] strcat(subj,'_',task,'_filtered_data_',sess,'.mat')], EEG); % save .mat format
                 end
             end
-            disp('DEBUG 20');
-            %% STEP 8: Prepare data for ICA
-            EEG_copy=[];
-            EEG_copy=EEG; % make a copy of the dataset
-            EEG_copy = eeg_checkset(EEG_copy);
-
-            % Perform 1Hz high pass filter on copied dataset
-            transband = 1;
-            fl_cutoff = transband/2;
-            fl_order = 3.3 / (transband / EEG.srate);
-
-            if mod(floor(fl_order),2) == 0
-                fl_order=floor(fl_order);
-            elseif mod(floor(fl_order),2) == 1
-                fl_order=floor(fl_order)+1;
-            end
-
-            EEG_copy = pop_firws(EEG_copy, 'fcutoff', fl_cutoff, 'ftype', 'highpass', 'wtype', 'hamming', 'forder', fl_order, 'minphase', 0);
-            EEG_copy = eeg_checkset(EEG_copy);
-
-            % Create 1 second epoch
-            EEG_copy=eeg_regepochs(EEG_copy,'recurrence', 1, 'limits',[0 1], 'rmbase', [NaN], 'eventtype', '999'); % insert temporary marker 1 second apart and create epochs
-            EEG_copy = eeg_checkset(EEG_copy);
-
-            % Find bad epochs and delete them from dataset
-            vol_thrs = [-1000 1000]; % [lower upper] threshold limit(s) in mV.
-            emg_thrs = [-100 30]; % [lower upper] threshold limit(s) in dB.
-            emg_freqs_limit = [20 40]; % [lower upper] frequency limit(s) in Hz.
-
-            % Find channel/s with xx% of artifacted 1-second epochs and delete them
-            chanCounter = 1; ica_prep_badChans = [];
-            numEpochs =EEG_copy.trials; % find the number of epochs
-            all_bad_channels=0;
-
-            for ch=1:EEG_copy.nbchan
-                % Find artifaceted epochs by detecting outlier voltage
-                EEG_copy = pop_eegthresh(EEG_copy,1, ch, vol_thrs(1), vol_thrs(2), EEG_copy.xmin, EEG_copy.xmax, 0, 0);
-                EEG_copy = eeg_checkset(EEG_copy);
-
-                % 1         : data type (1: electrode, 0: component)
-                % 0         : display with previously marked rejections? (0: no, 1: yes)
-                % 0         : reject marked trials? (0: no (but store the  marks), 1:yes)
-
-                % Find artifaceted epochs by using thresholding of frequencies in the data.
-                % this method mainly rejects muscle movement (EMG) artifacts
-                EEG_copy = pop_rejspec( EEG_copy, 1,'elecrange',ch ,'method','fft','threshold', emg_thrs, 'freqlimits', emg_freqs_limit, 'eegplotplotallrej', 0, 'eegplotreject', 0);
-
-                % method                : method to compute spectrum (fft)
-                % threshold             : [lower upper] threshold limit(s) in dB.
-                % freqlimits            : [lower upper] frequency limit(s) in Hz.
-                % eegplotplotallrej     : 0 = Do not superpose rejection marks on previous marks stored in the dataset.
-                % eegplotreject         : 0 = Do not reject marked trials (but store the  marks).
-
-                % Find number of artifacted epochs
-                EEG_copy = eeg_checkset(EEG_copy);
-                EEG_copy = eeg_rejsuperpose(EEG_copy, 1, 1, 1, 1, 1, 1, 1, 1);
-                artifacted_epochs=EEG_copy.reject.rejglobal;
-
-                % Find bad channel / channel with more than 20% artifacted epochs
-                if sum(artifacted_epochs) > (numEpochs*20/100)
-                    ica_prep_badChans(chanCounter) = ch;
-                    chanCounter=chanCounter+1;
-                end
-            end
-
-            % If all channels are bad, save the dataset at this stage and ignore the remaining of the preprocessing.
-            if numel(ica_prep_badChans)==EEG.nbchan || numel(ica_prep_badChans)+1==EEG.nbchan
-                all_bad_channels=1;
-                if corrected == 1
-                    warning(['No usable data for datafile', datafiles_for_log]);
-                else
-                warning(['No usable data for datafile', datafile_names{subject}]);
-                end
-                if output_format==1
-                    EEG = eeg_checkset(EEG);
-                    %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc));
-                    %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
-                    EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess));
-                    EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
-                elseif output_format==2
-                    %parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc,'.mat')], EEG); % save .mat format
-                    parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.mat')], EEG); % save .mat format
-                end
-
-            else
-                % Reject bad channel - channel with more than xx% artifacted epochs
-                EEG_copy = pop_select( EEG_copy,'nochannel', ica_prep_badChans);
-                EEG_copy = eeg_checkset(EEG_copy);
-            end
-
-            if numel(ica_prep_badChans)==0
-                ica_preparation_bad_channels='0';
-            else
-                ica_preparation_bad_channels=num2str(ica_prep_badChans);
-            end
-
-            if all_bad_channels == 1
-                length_ica_data=0;
-                total_ICs=0;
-                ICs_removed='0';
-                total_epochs_before_artifact_rejection=0;
-                total_epochs_after_artifact_rejection=0;
-                total_channels_interpolated=0;
-                any_usable_data = 0;
-                if corrected == 1
-                    report_table=table({datafiles_for_log}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
-                    {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
-                else
-                report_table=table({datafile_names{subject}}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
-                    {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
-                end
-                report_table.Properties.VariableNames={'datafile_names', 'date_processed', 'reference_used_for_faster', 'faster_bad_channels', ...
-                    'ica_preparation_bad_channels', 'length_ica_data', 'total_ICs', 'ICs_removed', 'total_epochs_before_artifact_rejection', ...
-                    'total_epochs_after_artifact_rejection', 'total_channels_interpolated', 'any_usable_data'};
-                writetable(report_table, [output_report_path '.csv'], "WriteMode", "append");
-                continue % ignore rest of the processing and go to next datafile
-            end
-
-            % Find the artifacted epochs across all channels and reject them before doing ICA.
-            EEG_copy = pop_eegthresh(EEG_copy,1, 1:EEG_copy.nbchan, vol_thrs(1), vol_thrs(2), EEG_copy.xmin, EEG_copy.xmax,0,0);
-            EEG_copy = eeg_checkset(EEG_copy);
-
-            % 1         : data type (1: electrode, 0: component)
-            % 0         : display with previously marked rejections? (0: no, 1: yes)
-            % 0         : reject marked trials? (0: no (but store the  marks), 1:yes)
-
-            % Find artifaceted epochs by using power threshold in 20-40Hz frequency band.
-            % This method mainly rejects muscle movement (EMG) artifacts.
-            EEG_copy = pop_rejspec(EEG_copy, 1,'elecrange', 1:EEG_copy.nbchan, 'method', 'fft', 'threshold', emg_thrs ,'freqlimits', emg_freqs_limit, 'eegplotplotallrej', 0, 'eegplotreject', 0);
-
-            % method                : method to compute spectrum (fft)
-            % threshold             : [lower upper] threshold limit(s) in dB.
-            % freqlimits            : [lower upper] frequency limit(s) in Hz.
-            % eegplotplotallrej     : 0 = Do not superpose rejection marks on previous marks stored in the dataset.
-            % eegplotreject         : 0 = Do not reject marked trials (but store the  marks).
-
-            % Find the number of artifacted epochs and reject them
-            EEG_copy = eeg_checkset(EEG_copy);
-            EEG_copy = eeg_rejsuperpose(EEG_copy, 1, 1, 1, 1, 1, 1, 1, 1);
-            reject_artifacted_epochs=EEG_copy.reject.rejglobal;
-            EEG_copy = pop_rejepoch(EEG_copy, reject_artifacted_epochs, 0);
-
-            %% STEP 9: Run ICA
-            length_ica_data=EEG_copy.trials; % length of data (in second) fed into ICA
-            EEG_copy = eeg_checkset(EEG_copy);
-            EEG_copy = pop_runica(EEG_copy, 'icatype', 'runica', 'extended', 1, 'stop', 1E-7, 'interupt','off');
-
-            %     %save data here for training purposes only (usually do not save here)
-            %     %only doing this to allow for skipping the full run of ica
-            %     EEG = pop_saveset(EEG, 'filename', strrep(datafile_names{subject}, ext, '_ica_data_immediate.set'),'filepath', [output_location filesep 'ica_data' filesep ]); % save .set format
-            %     %load data here for training purposes only (usually do not save here)
-            %     %only doing this to allow for skipping the full run of ica
-            %     EEG = pop_loadset( 'filename', strrep(datafile_names{subject}, ext, '_ica_data_immediate.set'), 'filepath', [output_location filesep 'ica_data' filesep]);
-
-            % Find the ICA weights that would be transferred to the original dataset
-            ICA_WINV=EEG_copy.icawinv;
-            ICA_SPHERE=EEG_copy.icasphere;
-            ICA_WEIGHTS=EEG_copy.icaweights;
-            ICA_CHANSIND=EEG_copy.icachansind;
-
-            % If channels were removed from copied dataset during preparation of ica, then remove
-            % those channels from original dataset as well before transferring ica weights.
-            EEG = eeg_checkset(EEG);
-            EEG = pop_select(EEG,'nochannel', ica_prep_badChans);
-
-            % Transfer the ICA weights of the copied dataset to the original dataset (the weights are used by ADJUST)
-            EEG.icawinv=ICA_WINV;
-            EEG.icasphere=ICA_SPHERE;
-            EEG.icaweights=ICA_WEIGHTS;
-            EEG.icachansind=ICA_CHANSIND;
-            EEG = eeg_checkset(EEG);
-
-            %% STEP 10: Run adjust to find artifacted ICA components
-            badICs=[]; EEG_copy =[];
-            EEG_copy = EEG;
-            EEG_copy = eeg_regepochs(EEG_copy,'recurrence', 1, 'limits',[0 1], 'rmbase', [NaN], 'eventtype', '999'); % insert temporary marker 1 second apart and create epochs
-            EEG_copy = eeg_checkset(EEG_copy);
-
-            if save_interim_result==1
-                if corrected == 1
-                    badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strcat(subj, '_', task, '_processed_data_', sess, '_adjust_report')]);
-                else
-                badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strrep(datafile_names{subject}, ext, '_adjust_report')]);
-                end
-            else
-                if corrected == 1
-                    badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strcat(subj, '_', task, '_processed_data_', sess, '_adjust_report')]);
-            else
-                badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strrep(datafile_names{subject}, ext, '_adjust_report')]);
-                end
-            end
-            close all;
-
-            % Mark the bad ICs found by ADJUST
-            for ic=1:length(badICs)
-                EEG.reject.gcompreject(1, badICs(ic))=1;
-                EEG = eeg_checkset(EEG);
-            end
-            total_ICs=size(EEG.icasphere, 1);
-            if numel(badICs)==0
-                ICs_removed='0';
-            else
-                ICs_removed=num2str(double(badICs));
-            end
-
-            %% Save dataset after ICA, if saving interim results was preferred
-            if save_interim_result==1
-                if output_format==1
-                    EEG = eeg_checkset(EEG);
-                    %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_ica_data_',sess,desc));
-                    %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_ica_data_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
-                    EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_ica_data_',sess));
-                    EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_ica_data_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
-                elseif output_format==2
-                    %parsave([[output_location filesep ] strcat(subj,'_',task,'_ica_data_',sess,desc,'.mat')], EEG); % save .mat format
-                    parsave([[output_location filesep ] strcat(subj,'_',task,'_ica_data_',sess,'.mat')], EEG); % save .mat format
-                end
-            end
-            
-           %no manual review/selection of ica artifact performed...
-
-            %% STEP 11: Remove artifacted ICA components from data
-            all_bad_ICs=0;
-            ICs2remove=find(EEG.reject.gcompreject); % find ICs to remove
-
-            % If all ICs and bad, save data at this stage and ignore rest of the preprocessing for this subject.
-            if numel(ICs2remove)==total_ICs
-                all_bad_ICs=1;
-                if corrected == 1
-                    warning(['No usable data for datafile', datafiles_for_log]);
-                else
-                warning(['No usable data for datafile', datafile_names{subject}]);
-                end
-                if output_format==1
-                    EEG = eeg_checkset(EEG);
-                    %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc));
-                    %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
-                    EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess));
-                    EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
-                elseif output_format==2
-                    %parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc,'.mat')], EEG); % save .mat format
-                    parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,'.mat')], EEG); % save .mat format
-                end
-            else
-                EEG = eeg_checkset( EEG );
-                EEG = pop_subcomp( EEG, ICs2remove, 0); % remove ICs from dataset
-            end
-
-            if all_bad_ICs==1
-                total_epochs_before_artifact_rejection=0;
-                total_epochs_after_artifact_rejection=0;
-                total_channels_interpolated=0;
-                any_usable_data = 0;
-                if corrected == 1
-                    report_table=table({datafiles_for_log}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
-                    {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
-                else
-                report_table=table({datafile_names{subject}}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
-                    {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
-                end
-                report_table.Properties.VariableNames={'datafile_names', 'date_processed', 'reference_used_for_faster', 'faster_bad_channels', ...
-                    'ica_preparation_bad_channels', 'length_ica_data', 'total_ICs', 'ICs_removed', 'total_epochs_before_artifact_rejection', ...
-                    'total_epochs_after_artifact_rejection', 'total_channels_interpolated', 'any_usable_data'};
-                writetable(report_table, [output_report_path '.csv'], "WriteMode", "append");
-                continue % ignore rest of the processing and go to next datafile
-            end
+           %% ICA REMOVED - All lines below featuring ICA are removed
+            ica_preparation_bad_channels = 'N/A';
+            length_ica_data = 'N/A';
+            total_ICs = 'N/A';
+            ICs_removed = 'N/A';
+            ica_prep_badChans = []; % needed for channel interpolation count at step 15
+           %% STEP 8: Prepare data for ICA
+           %  EEG_copy=[];
+           %  EEG_copy=EEG; % make a copy of the dataset
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %  % Perform 1Hz high pass filter on copied dataset
+           %  transband = 1;
+           %  fl_cutoff = transband/2;
+           %  fl_order = 3.3 / (transband / EEG.srate);
+           % 
+           %  if mod(floor(fl_order),2) == 0
+           %      fl_order=floor(fl_order);
+           %  elseif mod(floor(fl_order),2) == 1
+           %      fl_order=floor(fl_order)+1;
+           %  end
+           % 
+           %  EEG_copy = pop_firws(EEG_copy, 'fcutoff', fl_cutoff, 'ftype', 'highpass', 'wtype', 'hamming', 'forder', fl_order, 'minphase', 0);
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %  % Create 1 second epoch
+           %  EEG_copy=eeg_regepochs(EEG_copy,'recurrence', 1, 'limits',[0 1], 'rmbase', [NaN], 'eventtype', '999'); % insert temporary marker 1 second apart and create epochs
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %  % Find bad epochs and delete them from dataset
+           %  vol_thrs = [-1000 1000]; % [lower upper] threshold limit(s) in mV.
+           %  emg_thrs = [-100 30]; % [lower upper] threshold limit(s) in dB.
+           %  emg_freqs_limit = [20 40]; % [lower upper] frequency limit(s) in Hz.
+           % 
+           %  % Find channel/s with xx% of artifacted 1-second epochs and delete them
+           %  chanCounter = 1; ica_prep_badChans = [];
+           %  numEpochs =EEG_copy.trials; % find the number of epochs
+           %  all_bad_channels=0;
+           % 
+           %  for ch=1:EEG_copy.nbchan
+           %      % Find artifaceted epochs by detecting outlier voltage
+           %      EEG_copy = pop_eegthresh(EEG_copy,1, ch, vol_thrs(1), vol_thrs(2), EEG_copy.xmin, EEG_copy.xmax, 0, 0);
+           %      EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %      % 1         : data type (1: electrode, 0: component)
+           %      % 0         : display with previously marked rejections? (0: no, 1: yes)
+           %      % 0         : reject marked trials? (0: no (but store the  marks), 1:yes)
+           % 
+           %      % Find artifaceted epochs by using thresholding of frequencies in the data.
+           %      % this method mainly rejects muscle movement (EMG) artifacts
+           %      EEG_copy = pop_rejspec( EEG_copy, 1,'elecrange',ch ,'method','fft','threshold', emg_thrs, 'freqlimits', emg_freqs_limit, 'eegplotplotallrej', 0, 'eegplotreject', 0);
+           % 
+           %      % method                : method to compute spectrum (fft)
+           %      % threshold             : [lower upper] threshold limit(s) in dB.
+           %      % freqlimits            : [lower upper] frequency limit(s) in Hz.
+           %      % eegplotplotallrej     : 0 = Do not superpose rejection marks on previous marks stored in the dataset.
+           %      % eegplotreject         : 0 = Do not reject marked trials (but store the  marks).
+           % 
+           %      % Find number of artifacted epochs
+           %      EEG_copy = eeg_checkset(EEG_copy);
+           %      EEG_copy = eeg_rejsuperpose(EEG_copy, 1, 1, 1, 1, 1, 1, 1, 1);
+           %      artifacted_epochs=EEG_copy.reject.rejglobal;
+           % 
+           %      % Find bad channel / channel with more than 20% artifacted epochs
+           %      if sum(artifacted_epochs) > (numEpochs*20/100)
+           %          ica_prep_badChans(chanCounter) = ch;
+           %          chanCounter=chanCounter+1;
+           %      end
+           %  end
+           % 
+           %  % If all channels are bad, save the dataset at this stage and ignore the remaining of the preprocessing.
+           %  if numel(ica_prep_badChans)==EEG.nbchan || numel(ica_prep_badChans)+1==EEG.nbchan
+           %      all_bad_channels=1;
+           %      if corrected == 1
+           %          warning(['No usable data for datafile', datafiles_for_log]);
+           %      else
+           %      warning(['No usable data for datafile', datafile_names{subject}]);
+           %      end
+           %      if output_format==1
+           %          EEG = eeg_checkset(EEG);
+           %          %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc));
+           %          %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %          EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess));
+           %          EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %      elseif output_format==2
+           %          %parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,desc,'.mat')], EEG); % save .mat format
+           %          parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_channels_',sess,'.mat')], EEG); % save .mat format
+           %      end
+           % 
+           %  else
+           %      % Reject bad channel - channel with more than xx% artifacted epochs
+           %      EEG_copy = pop_select( EEG_copy,'nochannel', ica_prep_badChans);
+           %      EEG_copy = eeg_checkset(EEG_copy);
+           %  end
+           % 
+           %  if numel(ica_prep_badChans)==0
+           %      ica_preparation_bad_channels='0';
+           %  else
+           %      ica_preparation_bad_channels=num2str(ica_prep_badChans);
+           %  end
+           % 
+           %  if all_bad_channels == 1
+           %      length_ica_data=0;
+           %      total_ICs=0;
+           %      ICs_removed='0';
+           %      total_epochs_before_artifact_rejection=0;
+           %      total_epochs_after_artifact_rejection=0;
+           %      total_channels_interpolated=0;
+           %      any_usable_data = 0;
+           %      if corrected == 1
+           %          report_table=table({datafiles_for_log}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
+           %          {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
+           %      else
+           %      report_table=table({datafile_names{subject}}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
+           %          {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
+           %      end
+           %      report_table.Properties.VariableNames={'datafile_names', 'date_processed', 'reference_used_for_faster', 'faster_bad_channels', ...
+           %          'ica_preparation_bad_channels', 'length_ica_data', 'total_ICs', 'ICs_removed', 'total_epochs_before_artifact_rejection', ...
+           %          'total_epochs_after_artifact_rejection', 'total_channels_interpolated', 'any_usable_data'};
+           %      writetable(report_table, [output_report_path '.csv'], "WriteMode", "append");
+           %      continue % ignore rest of the processing and go to next datafile
+           %  end
+           % 
+           %  % Find the artifacted epochs across all channels and reject them before doing ICA.
+           %  EEG_copy = pop_eegthresh(EEG_copy,1, 1:EEG_copy.nbchan, vol_thrs(1), vol_thrs(2), EEG_copy.xmin, EEG_copy.xmax,0,0);
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %  % 1         : data type (1: electrode, 0: component)
+           %  % 0         : display with previously marked rejections? (0: no, 1: yes)
+           %  % 0         : reject marked trials? (0: no (but store the  marks), 1:yes)
+           % 
+           %  % Find artifaceted epochs by using power threshold in 20-40Hz frequency band.
+           %  % This method mainly rejects muscle movement (EMG) artifacts.
+           %  EEG_copy = pop_rejspec(EEG_copy, 1,'elecrange', 1:EEG_copy.nbchan, 'method', 'fft', 'threshold', emg_thrs ,'freqlimits', emg_freqs_limit, 'eegplotplotallrej', 0, 'eegplotreject', 0);
+           % 
+           %  % method                : method to compute spectrum (fft)
+           %  % threshold             : [lower upper] threshold limit(s) in dB.
+           %  % freqlimits            : [lower upper] frequency limit(s) in Hz.
+           %  % eegplotplotallrej     : 0 = Do not superpose rejection marks on previous marks stored in the dataset.
+           %  % eegplotreject         : 0 = Do not reject marked trials (but store the  marks).
+           % 
+           %  % Find the number of artifacted epochs and reject them
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           %  EEG_copy = eeg_rejsuperpose(EEG_copy, 1, 1, 1, 1, 1, 1, 1, 1);
+           %  reject_artifacted_epochs=EEG_copy.reject.rejglobal;
+           %  EEG_copy = pop_rejepoch(EEG_copy, reject_artifacted_epochs, 0);
+           % 
+           %  %% STEP 9: Run ICA
+           %  length_ica_data=EEG_copy.trials; % length of data (in second) fed into ICA
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           %  EEG_copy = pop_runica(EEG_copy, 'icatype', 'runica', 'extended', 1, 'stop', 1E-7, 'interupt','off');
+           % 
+           %  %     %save data here for training purposes only (usually do not save here)
+           %  %     %only doing this to allow for skipping the full run of ica
+           %  %     EEG = pop_saveset(EEG, 'filename', strrep(datafile_names{subject}, ext, '_ica_data_immediate.set'),'filepath', [output_location filesep 'ica_data' filesep ]); % save .set format
+           %  %     %load data here for training purposes only (usually do not save here)
+           %  %     %only doing this to allow for skipping the full run of ica
+           %  %     EEG = pop_loadset( 'filename', strrep(datafile_names{subject}, ext, '_ica_data_immediate.set'), 'filepath', [output_location filesep 'ica_data' filesep]);
+           % 
+           %  % Find the ICA weights that would be transferred to the original dataset
+           %  ICA_WINV=EEG_copy.icawinv;
+           %  ICA_SPHERE=EEG_copy.icasphere;
+           %  ICA_WEIGHTS=EEG_copy.icaweights;
+           %  ICA_CHANSIND=EEG_copy.icachansind;
+           % 
+           %  % If channels were removed from copied dataset during preparation of ica, then remove
+           %  % those channels from original dataset as well before transferring ica weights.
+           %  EEG = eeg_checkset(EEG);
+           %  EEG = pop_select(EEG,'nochannel', ica_prep_badChans);
+           % 
+           %  % Transfer the ICA weights of the copied dataset to the original dataset (the weights are used by ADJUST)
+           %  EEG.icawinv=ICA_WINV;
+           %  EEG.icasphere=ICA_SPHERE;
+           %  EEG.icaweights=ICA_WEIGHTS;
+           %  EEG.icachansind=ICA_CHANSIND;
+           %  EEG = eeg_checkset(EEG);
+           % 
+           %  %% STEP 10: Run adjust to find artifacted ICA components
+           %  badICs=[]; EEG_copy =[];
+           %  EEG_copy = EEG;
+           %  EEG_copy = eeg_regepochs(EEG_copy,'recurrence', 1, 'limits',[0 1], 'rmbase', [NaN], 'eventtype', '999'); % insert temporary marker 1 second apart and create epochs
+           %  EEG_copy = eeg_checkset(EEG_copy);
+           % 
+           %  if save_interim_result==1
+           %      if corrected == 1
+           %          badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strcat(subj, '_', task, '_processed_data_', sess, '_adjust_report')]);
+           %      else
+           %      badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strrep(datafile_names{subject}, ext, '_adjust_report')]);
+           %      end
+           %  else
+           %      if corrected == 1
+           %          badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strcat(subj, '_', task, '_processed_data_', sess, '_adjust_report')]);
+           %  else
+           %      badICs = adjusted_ADJUST(EEG_copy, [[output_location filesep] strrep(datafile_names{subject}, ext, '_adjust_report')]);
+           %      end
+           %  end
+           %  close all;
+           % 
+           %  % Mark the bad ICs found by ADJUST
+           %  for ic=1:length(badICs)
+           %      EEG.reject.gcompreject(1, badICs(ic))=1;
+           %      EEG = eeg_checkset(EEG);
+           %  end
+           %  total_ICs=size(EEG.icasphere, 1);
+           %  if numel(badICs)==0
+           %      ICs_removed='0';
+           %  else
+           %      ICs_removed=num2str(double(badICs));
+           %  end
+           % 
+           %  %% Save dataset after ICA, if saving interim results was preferred
+           %  if save_interim_result==1
+           %      if output_format==1
+           %          EEG = eeg_checkset(EEG);
+           %          %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_ica_data_',sess,desc));
+           %          %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_ica_data_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %          EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_ica_data_',sess));
+           %          EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_ica_data_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %      elseif output_format==2
+           %          %parsave([[output_location filesep ] strcat(subj,'_',task,'_ica_data_',sess,desc,'.mat')], EEG); % save .mat format
+           %          parsave([[output_location filesep ] strcat(subj,'_',task,'_ica_data_',sess,'.mat')], EEG); % save .mat format
+           %      end
+           %  end
+           % 
+           % %no manual review/selection of ica artifact performed...
+           % 
+           %  %% STEP 11: Remove artifacted ICA components from data
+           %  all_bad_ICs=0;
+           %  ICs2remove=find(EEG.reject.gcompreject); % find ICs to remove
+           % 
+           %  % If all ICs and bad, save data at this stage and ignore rest of the preprocessing for this subject.
+           %  if numel(ICs2remove)==total_ICs
+           %      all_bad_ICs=1;
+           %      if corrected == 1
+           %          warning(['No usable data for datafile', datafiles_for_log]);
+           %      else
+           %      warning(['No usable data for datafile', datafile_names{subject}]);
+           %      end
+           %      if output_format==1
+           %          EEG = eeg_checkset(EEG);
+           %          %EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc));
+           %          %EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %          EEG = pop_editset(EEG, 'setname',  strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess));
+           %          EEG = pop_saveset(EEG, 'filename', strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,'.set'),'filepath', [output_location filesep ]); % save .set format
+           %      elseif output_format==2
+           %          %parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,desc,'.mat')], EEG); % save .mat format
+           %          parsave([[output_location filesep ] strcat(subj,'_',task,'_no_usable_data_all_bad_ICs_',sess,'.mat')], EEG); % save .mat format
+           %      end
+           %  else
+           %      EEG = eeg_checkset( EEG );
+           %      EEG = pop_subcomp( EEG, ICs2remove, 0); % remove ICs from dataset
+           %  end
+           % 
+           %  if all_bad_ICs==1
+           %      total_epochs_before_artifact_rejection=0;
+           %      total_epochs_after_artifact_rejection=0;
+           %      total_channels_interpolated=0;
+           %      any_usable_data = 0;
+           %      if corrected == 1
+           %          report_table=table({datafiles_for_log}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
+           %          {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
+           %      else
+           %      report_table=table({datafile_names{subject}}, {datetime('now')}, {reference_used_for_faster}, {faster_bad_channels}, {ica_preparation_bad_channels}, {length_ica_data}, ...
+           %          {total_ICs}, {ICs_removed}, {total_epochs_before_artifact_rejection}, {total_epochs_after_artifact_rejection}, {total_channels_interpolated}, {any_usable_data});
+           %      end
+           %      report_table.Properties.VariableNames={'datafile_names', 'date_processed', 'reference_used_for_faster', 'faster_bad_channels', ...
+           %          'ica_preparation_bad_channels', 'length_ica_data', 'total_ICs', 'ICs_removed', 'total_epochs_before_artifact_rejection', ...
+           %          'total_epochs_after_artifact_rejection', 'total_channels_interpolated', 'any_usable_data'};
+           %      writetable(report_table, [output_report_path '.csv'], "WriteMode", "append");
+           %      continue % ignore rest of the processing and go to next datafile
+           %  end
 
             %% STEP 12: Segment data into fixed length epochs
             %run event labeling script
-            EEG = edit_event_markers_read(EEG); % researcher must make sure where this script runs from: from a labw devops folder or from their specific analysis folder
+            EEG = edit_event_markers_dheeg(EEG); % researcher must make sure where this script runs from: from a labw devops folder or from their specific analysis folder
 
             if epoch_data==1
                 if task_eeg ==1 % task eeg
@@ -1053,11 +1060,11 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
 
             if save_interim_result
                 if output_format==1
-                    if ~isfile([ filtered_filename '.set' ]) | ~isfile([ ica_filename '.set' ]) | ~isfile([ processed_filename '.set' ])
+                    if ~isfile([ filtered_filename '.set' ]) | ~isfile([ processed_filename '.set' ])
                         error(['Error: Not all expected output files ' filtered_filename '.set, ' ica_filename '.set, ' processed_filename '.set were outputted, exiting.'])
                     end
                 elseif output_format==2
-                    if ~isfile([ filtered_filename '.mat' ]) | ~isfile([ ica_filename '.mat' ]) | ~isfile([ processed_filename '.mat' ])
+                    if ~isfile([ filtered_filename '.mat' ]) | ~isfile([ processed_filename '.mat' ])
                         error(['Error: Not all expected output files ' filtered_filename '.mat, ' ica_filename '.mat, ' processed_filename '.mat were outputted, exiting.'])
                     end
                 end

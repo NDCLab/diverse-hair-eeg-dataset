@@ -1,14 +1,11 @@
-% NEED TO VERIFY THAT THE EVENT STRUCTURE FOR EEG RECORDINGS FROM DHEEG ALIGNS WITH PREVIOUS STUDIES
-% IF NOT - THEN EDIT EVENT LABELING SCRIPT HERE TO CORRECTLY LABEL FOR THE EEG STRUCT FOR SEP/DHEEG
-
-
-function EEG = edit_event_markers_read(EEG)
+function EEG = edit_event_markers_dheeg(EEG)
 %
 %%%%%% Label event markers%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-% This script labels the thrive flanker task data. Labelling includes basic
-% information about stimulus type and responses, as well as exhaustive
+% This script labels the diverse-hair EEG flanker task data. Labelling includes
+% basic information about stimulus type and responses, as well as exhaustive
 % labeling of prior/next trial data.
+% No social/nonsocial distinction — main task uses S41-S44 only.
 
 %% debug code
 % Kia commented debug code
@@ -26,15 +23,16 @@ function EEG = edit_event_markers_read(EEG)
 %% event codes from task
 
 % Stimulus
-% S 41 - Right + Congruent + Nonsocial
-% S 42 - Left + Congruent + Nonsocial
-% S 43 - Right + Incongruent + Nonsocial
-% S 44 - Left + Incongruent + Nonsocial
+% S 41 - Right + Congruent
+% S 42 - Left + Congruent
+% S 43 - Right + Incongruent
+% S 44 - Left + Incongruent
 
-% S 51 - Right + Congruent + Social
-% S 52 - Left + Congruent + Social
-% S 53 - Right + Incongruent + Social
-% S 54 - Left + Incongruent + Social
+% Practice
+% S  1 - Right + Congruent
+% S  2 - Left + Congruent
+% S  3 - Right + Incongruent
+% S  4 - Left + Incongruent
 
 % Response
 % S 11 - Correct
@@ -42,28 +40,20 @@ function EEG = edit_event_markers_read(EEG)
 % S 21 - Correct response, but it was not the first response made in the trial (a repeat or second key press).
 % S 22 - Incorrect response, but it was not the first response made in the trial (a repeat or second key press).
 
-% Reading Ranger:
-% S255
-% S157
-
 %all stim and resp markers for the task
-all_stimMarkers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', ...
-    'S 44', 'S 51', 'S 52', 'S 53', 'S 54'};
+all_stimMarkers = {'S  1', 'S  2', 'S  3', 'S  4', 'S 41', 'S 42', 'S 43', 'S 44'};
 all_respMarkers = {'S 11', 'S 12', 'S 21', 'S 22'};
 
 %subsets of stim/resp markers to be used in switch statements when
 %labelling
 practice_stimMarkers = {'S  1', 'S  2', 'S  3', 'S  4'};
-mainTask_stimMarkers = {'S 41', 'S 42', 'S 43', 'S 44', 'S 51', 'S 52', 'S 53', 'S 54'};
+mainTask_stimMarkers = {'S 41', 'S 42', 'S 43', 'S 44'};
 
-ns_stimMarkers = {'S 41', 'S 42', 'S 43', 'S 44'};
-s_stimMarkers = {'S 51', 'S 52', 'S 53', 'S 54'};
+rightTarDir_stimMarkers = {'S  1', 'S  3', 'S 41', 'S 43'};
+leftTarDir_stimMarkers = {'S  2', 'S  4', 'S 42', 'S 44'};
 
-rightTarDir_stimMarkers = {'S  1', 'S  3', 'S 41', 'S 43', 'S 51', 'S 53'};
-leftTarDir_stimMarkers = {'S  2', 'S  4', 'S 42', 'S 44', 'S 52', 'S 54'};
-
-congruent_stimMarkers = {'S  1', 'S  2', 'S 41', 'S 42', 'S 51', 'S 52'};
-incongruent_stimMarkers = {'S  3', 'S  4', 'S 43', 'S 44', 'S 53', 'S 54'};
+congruent_stimMarkers = {'S  1', 'S  2', 'S 41', 'S 42'};
+incongruent_stimMarkers = {'S  3', 'S  4', 'S 43', 'S 44'};
 
 first_RespMarkers = {'S 11', 'S 12'};
 extra_RespMarkers = {'S 21', 'S 22'};
@@ -76,7 +66,7 @@ validRt_cutoff = .150;
 
 %% Add labels to the event structure
 EEG = pop_editeventfield( EEG, 'indices',  strcat('1:', int2str(length(EEG.event))), ...
-    'observation','NaN',  'eventType','NaN', 'targetDir','NaN', 'congruency','NaN', 'responded','NaN', 'accuracy','NaN', ...
+    'eventType','NaN', 'targetDir','NaN', 'congruency','NaN', 'responded','NaN', 'accuracy','NaN', ...
     'rt','NaN', 'validRt','NaN', 'extraResponse','NaN', 'validTrial','NaN', ...
     'prevTargetDir','NaN', 'prevCongruency','NaN', 'prevResponded','NaN', ...
     'prevAccuracy','NaN', 'prevRt','NaN', 'prevValidRt','NaN', ...
@@ -87,7 +77,6 @@ EEG = pop_editeventfield( EEG, 'indices',  strcat('1:', int2str(length(EEG.event
 EEG = eeg_checkset( EEG );
 
 %note:accuracy and rt always corresponds to first response
-% 'observation' = ns, s
 % 'eventType' - stim, resp
 % 'targetDir' - l, r
 % 'congruency' - c, i
@@ -165,6 +154,11 @@ for t = all_stimMarkers_eventNums %t = event numbers stored in all_stimMarkers_e
 
     %figure out if a response was made. if so, identify event # of
     %response marker, rt, rt validity, accuracy, presence of extra responses.
+    % guard against stim being the last event in the recording (no response captured)
+    if t+1 > total_eventNums
+        responded = 0; extraResponse = 0; respEventNum = 0;
+        accuracy = 0; rt = 0; validRt = 0; validTrial = 0;
+    else
     switch EEG.event(t+1).type
 
         case first_RespMarkers %if there was a response
@@ -222,20 +216,13 @@ for t = all_stimMarkers_eventNums %t = event numbers stored in all_stimMarkers_e
             validTrial = 0;
 
     end
+    end % end bounds check
 
     %loop to label 1/2 events per trial
     for eventNum = [stimEventNum respEventNum]
 
         %if trial had no response, respEventNum will be zero
         if eventNum ~= 0
-
-            %label observation condition (nonsocial vs social)
-            switch EEG.event(t).type
-                case ns_stimMarkers
-                    EEG.event(eventNum).observation = 'ns';
-                case s_stimMarkers
-                    EEG.event(eventNum).observation = 's';
-            end
 
             %label stimulus target direction (right vs left)
             switch EEG.event(t).type
