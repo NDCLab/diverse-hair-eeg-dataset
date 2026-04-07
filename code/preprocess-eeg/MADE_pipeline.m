@@ -111,6 +111,10 @@ rawdata_location_parent = char(rawdata_location_parent);
 % 2. Enter the path of the channel location file
 channel_locations = loadbvef('/home/data/NDClab/datasets/diverse-hair-eeg-dataset/code/preprocess-eeg/CACS-128-X7-FIXED-no-cap-9elec-only.bvef'); % need to add bvef file to this directory for SEP
 
+% some dheeg Ps were recorded with different montages; identified here to then process differently
+full_montage_subjects = {'2900000', '2900001', '2900002'};
+custom_montage_subjects = {'290003', '290004', '290005', '290006', '290007', '290008', '290009', '290010', '290011', '290012', '290013', '290014', '290015'};
+
 % STIMULUS TRIGGERS
 % practice congruent right: 1
 % practice congruent left: 2
@@ -220,6 +224,20 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
         output_location = char(fullfile(main_dir, 'derivatives', 'preprocessed', subj, 'eeg'));
         output_report_path = char(fullfile(main_dir, 'derivatives', 'preprocessed', 'MADE_preprocessing_report'));
 
+	% Determine montage type
+	if ismember(curr_subj_folder, full_montage_subjects)
+    		montage_type = 'full'; % 64 channels
+    		channel_locations_file = '/home/data/NDClab/tools/lab-devOps/scripts/MADE_pipeline_standard/eeg_preprocessing/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-64only.bvef';
+    		frontal_channels_to_use = {'11','16'};
+	elseif ismember(curr_subj_folder, custom_montage_subjects)
+    		montage_type = 'custom'; % 9 channels
+    		channel_locations_file = '/home/data/NDClab/datasets/diverse-hair-eeg-dataset/code/preprocess-eeg/CACS-128-X7-FIXED-no-cap-9elec-only.bvef';
+    		frontal_channels_to_use = {'11','16'};
+	else
+    		error('Subject %s not found in montage lists', curr_subj_folder);
+	end	
+	% Load correct channel locs
+	channel_locations = loadbvef(channel_locations_file);	
         % Read files to analyses
         datafile_names=dir([rawdata_location filesep '*flanker_eeg*.vhdr']);
         datafile_names=datafile_names(~ismember({datafile_names.name},{'.', '..', '.DS_Store'}));
