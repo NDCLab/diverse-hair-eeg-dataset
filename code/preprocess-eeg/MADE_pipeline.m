@@ -109,7 +109,7 @@ rawdata_location_parent = strcat(main_dir, '/sourcedata/raw/eeg'); % Only raw da
 rawdata_location_parent = char(rawdata_location_parent);
 
 % 2. Enter the path of the channel location file
-channel_locations = loadbvef('/home/data/NDClab/tools/lab-devOps/scripts/MADE_pipeline_standard/eeg_preprocessing/chan_locs_files/electrode_locs_files/CACS-128-X7-FIXED-no-cap-9elec-only.bvef'); % need to add bvef file to this directory for SEP
+channel_locations = loadbvef('/home/data/NDClab/datasets/diverse-hair-eeg-dataset/code/preprocess-eeg/CACS-128-X7-FIXED-no-cap-9elec-only.bvef'); % need to add bvef file to this directory for SEP
 
 % STIMULUS TRIGGERS
 % practice congruent right: 1
