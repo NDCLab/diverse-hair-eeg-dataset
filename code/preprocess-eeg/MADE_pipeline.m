@@ -306,14 +306,16 @@ parfor file_locater_counter = 1:length(subjects_to_process) %1:16
             end
 
             %make a copy of GSR and sync channels, then delete from eeg structure
-
-            gsrChan = EEG.data(64, :);
-            EEG = pop_select( EEG,'nochannel', 64);
-            EEG = eeg_checkset( EEG );
-
-            syncChan = EEG.data(64, :);
-            EEG = pop_select( EEG,'nochannel', 64);
-            EEG = eeg_checkset( EEG );
+	    gsrIdx = find(strcmp({EEG.chanlocs.labels}, 'GSR'));
+	    syncIdx = find(strcmp({EEG.chanlocs.labels}, 'SYNC'));
+	    if ~isempty(gsrIdx)
+	    	gsrChan = EEG.data(gsrIdx, :);
+	    	EEG = pop_select(EEG, 'nochannel', gsrIdx);
+            end
+            if ~isempty(syncIdx)
+                syncChan = EEG.data(syncIdx, :);
+                EEG = pop_select(EEG, 'nochannel', syncIdx);
+            end
             %[ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
 
             %add in ref channels
